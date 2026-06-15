@@ -1,0 +1,36 @@
+import numpy as np # Import nécessaire pour le traitement d'image
+from PIL import Image as PILImage # Pour distinguer l'import précédent
+
+# ... (tout ton code jusqu'à output = model(real_img_batch)) ...
+
+with torch.no_grad():
+    output = model(real_img_batch)
+    
+    print("\nScore d'anomalie global :", output.pred_score.item())
+
+    # --- NOUVELLE PARTIE : VISUALISATION ---
+    
+    # 1. On convertit le tenseur d'image originale en format d'image classique pour l'affichage
+    original_image = real_img_batch[0].cpu().permute(1, 2, 0).numpy() # Changement de dimensions pour affichage
+    original_image = (original_image * 255).astype('uint8') # Rescaling 0-255 et conversion en entier
+    original_image = PILImage.fromarray(original_image) # Conversion en image PIL
+
+    if hasattr(output, 'anomaly_map'):
+        # 2. Extraire et traiter la carte d'anomalie (heatmap)
+        heatmap = output.anomaly_map[0].cpu().numpy() # [H, W] - Extraction du tenseur vers numpy
+        heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-6) # Normalisation 0-1
+        heatmap = PILImage.fromarray((heatmap * 255).astype('uint8')).convert("L") # Image niveaux de gris
+        heatmap = heatmap.resize(original_image.size) # Redimensionnement à la taille originale
+
+        # 3. Créer l'overlay (superposition)
+        # On utilise Pillow pour combiner l'originale et la heatmap avec transparence
+        heatmap_rgb = heatmap.convert("RGB") # Reconvertir pour colorisation éventuelle si besoin
+        combined_image = PILImage.blend(original_image, heatmap_rgb, alpha=0.5) # Alpha = 0.5 (transparence moyenne)
+        
+        # 4. Afficher les images résultantes (dépend de l'environnement, show() ouvre souvent une fenêtre)
+        combined_image.show() # Ouvre l'overlay (superposition originale + heatmap)
+        print("Image superposée (overlay) générée et affichée.")
+    else:
+        print("L'objet de sortie ne contient pas de carte d'anomalie.")
+
+# ... (fin de ton code pour pred_label, etc.) ...
