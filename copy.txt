@@ -1,1 +1,3 @@
-python evaluate_experiment.py --dataset_base_dir 'chemin/vers/ton/dataset/capsule' --anomaly_maps_dir 'predictions/' --output_dir 'metrics/'
+python mvtec_ad_evaluation/evaluate_experiment.py --dataset_base_dir . --anomaly_maps_dir predictions --output_dir metrics
+
+python mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
