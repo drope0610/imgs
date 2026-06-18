@@ -8,7 +8,7 @@ import numpy as np
 
 # --- CONFIGURATION ---
 CATEGORIE = "capsule"  # Modifier selon l'objet testé
-DOSSIER_TEST = f"Images/imgs/{CATEGORIE}/test"  # Ton dossier contenant 'good', 'crack', etc.
+DOSSIER_TEST = f"{CATEGORIE}/test"  # Ton dossier contenant 'good', 'crack', etc.
 DOSSIER_SORTIE_PRED = f"predictions/{CATEGORIE}/test"  # Arborescence requise par MVTec
 
 print("Chargement du modèle WinClip...")
