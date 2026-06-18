@@ -1,3 +1,1 @@
-python mvtec_ad_evaluation/evaluate_experiment.py --dataset_base_dir . --anomaly_maps_dir predictions --output_dir metrics
-
-python mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x64.sh
