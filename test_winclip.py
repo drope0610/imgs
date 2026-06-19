@@ -16,7 +16,7 @@ MVTEC_CATEGORIES = [
     'tile', 'toothbrush', 'transistor', 'wood', 'zipper'
 ]
 
-RACINE_DATASET = Path(__file__).parent 
+RACINE_DATASET = Path(__file__).parent / "mvtec_anomaly_detection"
 BATCH_SIZE = 8 # Augmente à 16 ou 32 si ta carte graphique a beaucoup de mémoire (VRAM)
 
 print("Préparation du GPU/CPU...")
