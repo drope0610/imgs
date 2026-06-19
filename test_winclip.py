@@ -1,3 +1,4 @@
+import time
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
@@ -20,6 +21,7 @@ BATCH_SIZE = 8 # Augmente à 16 ou 32 si ta carte graphique a beaucoup de mémoi
 
 print("Préparation du GPU/CPU...")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"*** Appareil actif : {device} ***") # Vérification visuelle dans le terminal
 
 # 1. TRANSFORMATION CORRIGÉE (Crucial pour la précision de WinCLIP)
 transform = T.Compose([
@@ -50,7 +52,7 @@ class MVTecDataset(Dataset):
         return img_tensor, str(img_path), largeur, hauteur
 
 
-# 3. FONCTION D'INFÉRENCE OPTIMISÉE
+# 3. FONCTION D'INFÉRENCE OPTIMISÉE AVEC PROFILAGE DE TEMPS
 def generer_anomaly_maps_optimise(dossier_test, chemin_sortie_racine, model):
     dataset = MVTecDataset(dossier_test)
     
@@ -60,39 +62,51 @@ def generer_anomaly_maps_optimise(dossier_test, chemin_sortie_racine, model):
     # Le DataLoader s'occupe de grouper les images par lots (Batch)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4 if torch.cuda.is_available() else 0)
     
+    temps_total_calcul = 0
+    temps_total_sauvegarde = 0
+
     with torch.no_grad(): # Désactive le calcul des gradients (accélère l'inférence)
         for batch_tensors, batch_paths, batch_largeurs, batch_hauteurs in dataloader:
             
-            # Envoi du lot complet au GPU
+            # --- CHRONO 1 : LE CALCUL IA (GPU) ---
+            debut_calcul = time.time()
+            
             batch_tensors = batch_tensors.to(device)
-            
-            # Le GPU calcule les anomalies pour TOUTES les images du lot en même temps
             outputs = model(batch_tensors)
-            
-            # Récupération des cartes d'anomalies (Taille : Batch x 1 x 240 x 240)
             anomaly_maps = outputs.anomaly_map 
             
-            # --- TRAITEMENT DU LOT ---
+            # On force PyTorch à attendre que le GPU ait fini pour avoir un temps exact
+            if device.type == 'cuda':
+                torch.cuda.synchronize() 
+                
+            temps_total_calcul += (time.time() - debut_calcul)
+            
+            # --- CHRONO 2 : LE TRAITEMENT ET LA SAUVEGARDE (CPU / Disque) ---
+            debut_sauvegarde = time.time()
+            
             for i in range(len(batch_paths)):
                 img_path = Path(batch_paths[i])
                 largeur_orig = batch_largeurs[i].item()
                 hauteur_orig = batch_hauteurs[i].item()
                 
-                # 1. Redimensionnement rapide sur GPU via interpolation
-                map_tensor = anomaly_maps[i].unsqueeze(0) # Garder le format 1x1xHxW
+                # Correction appliquée : double unsqueeze pour forcer le format 1x1xHxW
+                map_tensor = anomaly_maps[i].unsqueeze(0).unsqueeze(0) 
                 map_resized = F.interpolate(map_tensor, size=(hauteur_orig, largeur_orig), mode='bilinear', align_corners=False)
                 
-                # 2. Conversion finale en Numpy pour la sauvegarde
                 anomaly_map_final = map_resized.squeeze().cpu().numpy().astype(np.float32)
                 
-                # 3. Création des dossiers et sauvegarde
-                # (Extrait le nom du défaut qui est le dossier parent de l'image)
                 nom_defaut = img_path.parent.name 
                 dossier_export = chemin_sortie_racine / nom_defaut
                 dossier_export.mkdir(parents=True, exist_ok=True)
                 
                 nom_fichier_sortie = dossier_export / f"{img_path.stem}.tiff"
                 tiff.imwrite(str(nom_fichier_sortie), anomaly_map_final)
+                
+            temps_total_sauvegarde += (time.time() - debut_sauvegarde)
+
+    # Affichage des temps à la fin de chaque catégorie
+    print(f"      -> [Chrono] Temps d'inférence (GPU) : {temps_total_calcul:.2f} s")
+    print(f"      -> [Chrono] Temps de sauvegarde (Disque) : {temps_total_sauvegarde:.2f} s")
 
 
 # --- BOUCLE PRINCIPALE ---
