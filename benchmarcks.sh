@@ -21,7 +21,7 @@ fi
 # ==========================================================
 echo -e "\n>>> 1. Activation de l'environnement Anomalib..."
 # Remplace 'base' par le nom de ton environnement si tu en as créé un exprès pour Anomalib
-conda activate base  
+conda deactivate
 
 echo ">>> Execution du script de test WinClip..."
 python test_winclip.py
@@ -40,7 +40,7 @@ conda activate mad_eval_script
 
 echo ">>> Lancement du script officiel de calcul MVTec AD..."
 python mvtec_ad_evaluation/evaluate_experiment.py \
-    --dataset_base_dir mvtec_anomaly__detection \
+    --dataset_base_dir mvtec_anomaly_detection \
     --anomaly_maps_dir predictions \
     --output_dir metrics
 
