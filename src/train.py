@@ -1,5 +1,6 @@
 import os
 import torch
+# On utilise bien MVTec et non MVTecAD pour la version 1.1.1
 from anomalib.data import MVTec
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
@@ -26,7 +27,6 @@ def main():
 
     print(f"📦 Chargement du dataset MVTec (v1.1.1) pour la catégorie : {category}")
     
-    # L'API stable v1.1.1 utilise MVTec et gère parfaitement le paramètre task
     datamodule = MVTec(
         root=dataset_root,
         category=category,
