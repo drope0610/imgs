@@ -41,7 +41,7 @@ conda activate mad_eval_script
 echo ">>> Lancement du script officiel de calcul MVTec AD..."
 python mvtec_ad_evaluation/evaluate_experiment.py \
     --dataset_base_dir mvtec_anomaly_detection \
-    --anomaly_maps_dir predictions \
+    --anomaly_maps_dir mvtec_anomaly_detection/predictions \
     --output_dir metrics
 
 if [ $? -ne 0 ]; then
