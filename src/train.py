@@ -1,6 +1,7 @@
 import os
 import torch
-from anomalib.data import MVTec
+# Remplacement de MVTec par MVTecAD suite à la mise à jour de l'API
+from anomalib.data import MVTecAD
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
 
@@ -23,14 +24,14 @@ def main():
     # 1. Vérification du matériel
     device = check_gpu()
 
-    # 2. Configuration des chemins (Modifier selon votre catégorie de test, ex: 'bottle')
+    # 2. Configuration des chemins
     category = "bottle"
     dataset_root = os.path.abspath("./mvtec_anomaly_detection")
 
-    print(f"📦 Chargement du dataset MVTec pour la catégorie : {category}")
+    print(f"📦 Chargement du dataset MVTecAD pour la catégorie : {category}")
     
-    # Configuration du DataModule Anomalib
-    datamodule = MVTec(
+    # Utilisation de la nouvelle classe MVTecAD
+    datamodule = MVTecAD(
         root=dataset_root,
         category=category,
         image_size=(256, 256),
@@ -43,12 +44,11 @@ def main():
     print(f"🤖 Initialisation du modèle EfficientAD...")
     model = EfficientAd()
 
-    # 4. Configuration du moteur d'entraînement (Engine)
-    # C'est ici qu'Anomalib gère les boucles de calcul, les checkpoints et le device
+    # 4. Configuration du moteur d'entraînement
     engine = Engine(
         accelerator=device,
         devices=1,
-        max_epochs=10,  # Réduit à 10 pour un premier test rapide, EfficientAD converge vite
+        max_epochs=10, 
         default_root_dir=f"./results/efficientad/{category}"
     )
 
