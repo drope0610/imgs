@@ -1,8 +1,6 @@
 import os
 import torch
-from anomalib.data import MVTecAD
-# Ajout de l'import pour spécifier le type de tâche
-from anomalib.data.utils import TaskType
+from anomalib.data import MVTec
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
 
@@ -22,30 +20,25 @@ def check_gpu():
     return device
 
 def main():
-    # 1. Vérification du matériel
     device = check_gpu()
-
-    # 2. Configuration des chemins
     category = "bottle"
     dataset_root = os.path.abspath("./mvtec_anomaly_detection")
 
-    print(f"📦 Chargement du dataset MVTecAD pour la catégorie : {category}")
+    print(f"📦 Chargement du dataset MVTec (v1.1.1) pour la catégorie : {category}")
     
-    # CORRECTION : Ajout de l'argument task explicitement
-    datamodule = MVTecAD(
+    # L'API stable v1.1.1 utilise MVTec et gère parfaitement le paramètre task
+    datamodule = MVTec(
         root=dataset_root,
         category=category,
         train_batch_size=1,
         eval_batch_size=1,
         num_workers=4,
-        task=TaskType.SEGMENTATION
+        task="segmentation"
     )
 
-    # 3. Initialisation du modèle (EfficientAD)
     print(f"🤖 Initialisation du modèle EfficientAD...")
     model = EfficientAd()
 
-    # 4. Configuration du moteur d'entraînement
     engine = Engine(
         accelerator=device,
         devices=1,
@@ -53,7 +46,6 @@ def main():
         default_root_dir=f"./results/efficientad/{category}"
     )
 
-    # 5. Lancement de l'entraînement
     print(f"🚀 Début de l'entraînement d'EfficientAD sur '{category}'...")
     engine.fit(model=model, datamodule=datamodule)
     
