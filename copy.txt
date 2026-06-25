@@ -1,6 +1,19 @@
-~/Desktop/Images/imgs$ python3 src/train.py 
+barthou@agx:~/Desktop/Images/imgs$ python3 src/train.py 
+/home/barthou/.local/lib/python3.10/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+==================================================
+VÉRIFICATION DU MATÉRIEL GPU
+==================================================
+✅ CUDA est disponible !
+🔥 GPU détecté : Orin
+📟 Version de CUDA : 12.6
+==================================================
+
+📦 Chargement du dataset MVTecAD pour la catégorie : bottle
 Traceback (most recent call last):
-  File "/home/barthou/Desktop/Images/imgs/src/train.py", line 3, in <module>
-    from anomalib.data import MVTec
-ImportError: cannot import name 'MVTec' from 'anomalib.data' (/home/barthou/.local/lib/python3.10/site-packages/anomalib/data/__init__.py)
+  File "/home/barthou/Desktop/Images/imgs/src/train.py", line 62, in <module>
+    main()
+  File "/home/barthou/Desktop/Images/imgs/src/train.py", line 34, in main
+    datamodule = MVTecAD(
+TypeError: MVTecAD.__init__() got an unexpected keyword argument 'image_size'
 
