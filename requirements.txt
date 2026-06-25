@@ -1,5 +1,7 @@
-anomalib
+anomalib==1.1.1
 torch
 torchvision
 lightning
+imgaug
+numpy<2.0.0
 
