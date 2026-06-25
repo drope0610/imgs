@@ -1,6 +1,8 @@
 import os
 import torch
 from anomalib.data import MVTecAD
+# Ajout de l'import pour spécifier le type de tâche
+from anomalib.data.utils import TaskType
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
 
@@ -29,15 +31,14 @@ def main():
 
     print(f"📦 Chargement du dataset MVTecAD pour la catégorie : {category}")
     
-    # CORRECTIONS ICI : 
-    # - Retrait de 'image_size'
-    # - Passage des batchs à 1 (Obligatoire pour EfficientAD)
+    # CORRECTION : Ajout de l'argument task explicitement
     datamodule = MVTecAD(
         root=dataset_root,
         category=category,
         train_batch_size=1,
         eval_batch_size=1,
-        num_workers=4
+        num_workers=4,
+        task=TaskType.SEGMENTATION
     )
 
     # 3. Initialisation du modèle (EfficientAD)
