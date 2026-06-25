@@ -1,9 +1,10 @@
 import os
 import torch
-# On utilise bien MVTec et non MVTecAD pour la version 1.1.1
 from anomalib.data import MVTec
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
+# Import indispensable pour gérer les modes d'exportation
+from anomalib.deploy import ExportMode
 
 def check_gpu():
     print("="*50)
@@ -25,7 +26,7 @@ def main():
     category = "bottle"
     dataset_root = os.path.abspath("./mvtec_anomaly_detection")
 
-    print(f"📦 Chargement du dataset MVTec (v1.1.1) pour la catégorie : {category}")
+    print(f"📦 Chargement du dataset MVTec pour la catégorie : {category}")
     
     datamodule = MVTec(
         root=dataset_root,
@@ -39,6 +40,7 @@ def main():
     print(f"🤖 Initialisation du modèle EfficientAD...")
     model = EfficientAd()
 
+    # Ajout du paramètre pour exporter le modèle en ONNX à la fin
     engine = Engine(
         accelerator=device,
         devices=1,
@@ -49,7 +51,10 @@ def main():
     print(f"🚀 Début de l'entraînement d'EfficientAD sur '{category}'...")
     engine.fit(model=model, datamodule=datamodule)
     
-    print("✅ Entraînement terminé ! Les résultats sont sauvegardés dans ./results")
+    print("📦 Exportation du modèle au format ONNX...")
+    engine.export(model=model, export_type=ExportMode.ONNX)
+
+    print("✅ Entraînement et exportation terminés ! Les fichiers .onnx sont dans ./results")
 
 if __name__ == "__main__":
     main()
