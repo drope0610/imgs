@@ -3,8 +3,8 @@ import torch
 from anomalib.data import MVTec
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
-# Import indispensable pour gérer les modes d'exportation
-from anomalib.deploy import ExportMode
+# CORRECTION : Importation de ExportType pour la version 1.1.1
+from anomalib.deploy import ExportType
 
 def check_gpu():
     print("="*50)
@@ -40,7 +40,6 @@ def main():
     print(f"🤖 Initialisation du modèle EfficientAD...")
     model = EfficientAd()
 
-    # Ajout du paramètre pour exporter le modèle en ONNX à la fin
     engine = Engine(
         accelerator=device,
         devices=1,
@@ -52,7 +51,8 @@ def main():
     engine.fit(model=model, datamodule=datamodule)
     
     print("📦 Exportation du modèle au format ONNX...")
-    engine.export(model=model, export_type=ExportMode.ONNX)
+    # Utilisation de ExportType.ONNX
+    engine.export(model=model, export_type=ExportType.ONNX)
 
     print("✅ Entraînement et exportation terminés ! Les fichiers .onnx sont dans ./results")
 
