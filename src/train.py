@@ -1,9 +1,9 @@
 import os
+import argparse
 import torch
 from anomalib.data import MVTec
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
-# CORRECTION : Importation de ExportType pour la version 1.1.1
 from anomalib.deploy import ExportType
 
 def check_gpu():
@@ -13,7 +13,6 @@ def check_gpu():
     if torch.cuda.is_available():
         print(f"✅ CUDA est disponible !")
         print(f"🔥 GPU détecté : {torch.cuda.get_device_name(0)}")
-        print(f"📟 Version de CUDA : {torch.version.cuda}")
         device = "gpu"
     else:
         print("⚠️ Aucun GPU détecté. L'entraînement se fera sur CPU.")
@@ -22,8 +21,24 @@ def check_gpu():
     return device
 
 def main():
+    # Configuration des arguments de la ligne de commande
+    parser = argparse.ArgumentParser(description="Pipeline d'entraînement MVTec AD")
+    parser.add_argument(
+        "--category", 
+        type=str, 
+        default="bottle", 
+        help="Catégorie MVTec à entraîner (ex: cable, capsule, wood...)"
+    )
+    parser.add_argument(
+        "--epochs", 
+        type=int, 
+        default=10, 
+        help="Nombre d'époques d'entraînement"
+    )
+    args = parser.parse_args()
+
     device = check_gpu()
-    category = "bottle"
+    category = args.category
     dataset_root = os.path.abspath("./mvtec_anomaly_detection")
 
     print(f"📦 Chargement du dataset MVTec pour la catégorie : {category}")
@@ -37,24 +52,23 @@ def main():
         task="segmentation"
     )
 
-    print(f"🤖 Initialisation du modèle EfficientAD...")
+    print(f"🤖 Initialisation du modèle EfficientAD pour '{category}'...")
     model = EfficientAd()
 
     engine = Engine(
         accelerator=device,
         devices=1,
-        max_epochs=10, 
+        max_epochs=args.epochs, 
         default_root_dir=f"./results/efficientad/{category}"
     )
 
-    print(f"🚀 Début de l'entraînement d'EfficientAD sur '{category}'...")
+    print(f"🚀 Début de l'entraînement d'EfficientAD sur '{category}' ({args.epochs} époques)...")
     engine.fit(model=model, datamodule=datamodule)
     
-    print("📦 Exportation du modèle au format ONNX...")
-    # Utilisation de ExportType.ONNX
+    print(f"📦 Exportation du modèle '{category}' au format ONNX...")
     engine.export(model=model, export_type=ExportType.ONNX)
 
-    print("✅ Entraînement et exportation terminés ! Les fichiers .onnx sont dans ./results")
+    print(f"✅ [SUCCÈS] Entraînement et exportation ONNX terminés pour '{category}' !")
 
 if __name__ == "__main__":
     main()
