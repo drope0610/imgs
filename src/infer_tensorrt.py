@@ -33,7 +33,9 @@ def preprocess_image(image_path):
     
     # Format PyTorch/TensorRT : (Batch, Channels, Height, Width)
     img = np.transpose(img, (2, 0, 1))
-    img = np.expand_dict(img, axis=0)
+    
+    # CORRECTION : expand_dims au lieu de expand_dict !
+    img = np.expand_dims(img, axis=0)
     
     # Important : Convertir en Float16 si le moteur a été compilé avec --fp16 !
     return np.ascontiguousarray(img, dtype=np.float16), original_img
@@ -44,7 +46,6 @@ def main():
     context = engine.create_execution_context()
 
     # 2. Allocation de la mémoire sur le GPU (VRAM)
-    # On identifie les dimensions des entrées et sorties du modèle
     input_binding_idx = 0
     output_binding_idx = 1
     
@@ -86,7 +87,8 @@ def main():
     
     # Normalisation de la carte entre 0 et 255 pour OpenCV
     map_min, map_max = anomaly_map.min(), anomaly_map.max()
-    anomaly_map = (anomaly_map - map_min) / (map_max - map_min)
+    if map_max - map_min > 0:
+        anomaly_map = (anomaly_map - map_min) / (map_max - map_min)
     anomaly_map = (anomaly_map * 255).astype(np.uint8)
     
     # Application d'un filtre de couleur (Bleu = OK, Rouge = Défaut)
