@@ -47,6 +47,22 @@ def main():
     context.set_tensor_address(input_name, int(d_input))
     context.set_tensor_address(output_name, int(d_output))
 
+    memory_refs = [] # Pour éviter que Python ne vide la mémoire GPU trop tôt
+    
+    if engine.num_io_tensors > 2:
+        output2_name = engine.get_tensor_name(2)
+        output2_shape = engine.get_tensor_shape(output2_name)
+        output2_dtype = trt.nptype(engine.get_tensor_dtype(output2_name))
+        
+        # On calcule la taille en octets : volume * taille du type (ex: 4 octets pour float32)
+        taille_octets = trt.volume(output2_shape) * np.dtype(output2_dtype).itemsize
+        
+        # On alloue la mémoire sur le GPU (Device) et on lie l'adresse
+        d_output2 = cuda.mem_alloc(taille_octets)
+        context.set_tensor_address(output2_name, int(d_output2))
+        
+        memory_refs.append(d_output2)
+
     # 4. Préparation de l'image
     print("📸 Préparation de l'image...")
     img = cv2.imread(IMAGE_PATH)
