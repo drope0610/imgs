@@ -44,7 +44,8 @@ def main():
     d_input = cuda.mem_alloc(h_input.nbytes)
     d_output = cuda.mem_alloc(h_output.nbytes)
     
-    bindings = [int(d_input), int(d_output)]
+    context.set_tensor_address(input_name, int(d_input))
+    context.set_tensor_address(output_name, int(d_output))
 
     # 4. Préparation de l'image
     print("📸 Préparation de l'image...")
@@ -74,7 +75,7 @@ def main():
     cuda.memcpy_htod_async(d_input, h_input, stream)
     
     # Exécution
-    context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+    context.execute_async_v3(stream_handle=stream.handle)
     
     # Copie Device -> Host vers la mémoire pagelocked (h_output)
     cuda.memcpy_dtoh_async(h_output, d_output, stream)
