@@ -29,13 +29,24 @@ do
     fi
 
     echo "🎯 Fichier ONNX trouvé : $ONNX_PATH"
-    echo "🛠️ Compilation du moteur TensorRT (FP16) via trtexec..."
+    echo "🛠️ Détection de trtexec et compilation du moteur TensorRT..."
 
-    # 3. Compilation TensorRT optimisée
-    /usr/src/tensorrt/bin/trtexec \
+    # Détection de trtexec
+    TRTEXEC_CMD="trtexec"
+    if ! command -v $TRTEXEC_CMD &> /dev/null; then
+        if [ -f "/usr/src/tensorrt/bin/trtexec" ]; then
+            TRTEXEC_CMD="/usr/src/tensorrt/bin/trtexec"
+        else
+            echo "❌ ERREUR: trtexec introuvable. Veuillez l'ajouter à votre PATH."
+            exit 1
+        fi
+    fi
+
+    # 3. Compilation TensorRT optimisée (FP16 & INT8 pour Jetson)
+    $TRTEXEC_CMD \
         --onnx=$ONNX_PATH \
         --saveEngine=./results/efficientad/${CAT}/efficientad_${CAT}.engine \
-        --fp16
+        --fp16 --int8
 
     if [ $? -eq 0 ]; then
         echo "✅ [SUCCÈS GLOBAL] Moteur TensorRT créé pour $CAT !"

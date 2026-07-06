@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# --- CONFIGURATION DES CHEMINS ---
-# On récupère le chemin absolu où se trouve Miniconda
-CONDA_PATH="$HOME/miniconda3/etc/profile.d/conda.sh"
-
 echo "=========================================================="
 echo "   DEBUT DU PIPELINE D'EVALUATION AUTOMATIQUE             "
 echo "=========================================================="
 
 # 1. Chargement des commandes Conda dans le script Bash
-if [ -f "$CONDA_PATH" ]; then
-    source "$CONDA_PATH"
+if command -v conda &> /dev/null; then
+    eval "$(conda shell.bash hook)"
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/anaconda3/etc/profile.d/conda.sh"
 else
-    echo "[ERREUR] Impossible de trouver l'initialisation de Conda à l'emplacement : $CONDA_PATH"
+    echo "[ERREUR] Impossible de trouver l'initialisation de Conda."
     exit 1
 fi
 
@@ -24,7 +24,7 @@ echo -e "\n>>> 1. Activation de l'environnement Anomalib..."
 conda deactivate
 
 echo ">>> Execution du script de test WinClip..."
-python test_winclip.py
+python src/test_winclip.py
 
 if [ $? -ne 0 ]; then
     echo "[ERREUR] Le script test_winclip.py a plante. Arret du pipeline."

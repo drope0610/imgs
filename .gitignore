@@ -1,0 +1,7 @@
+logs/
+mvtec_anomaly_detection/
+results/
+metrics/
+__pycache__/
+*.pyc
+.DS_Store
