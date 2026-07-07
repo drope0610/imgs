@@ -44,14 +44,15 @@ do
 
     # 3. Compilation TensorRT optimisée (FP16 & INT8 pour Jetson)
     # On sauvegarde les logs de trtexec (qui contiennent les FPS et Latence)
+    mkdir -p ./results/engines
     $TRTEXEC_CMD \
         --onnx=$ONNX_PATH \
-        --saveEngine=./results/efficientad/${CAT}/efficientad_${CAT}.engine \
+        --saveEngine=./results/engines/efficientad_${CAT}.engine \
         --fp16 --int8 | tee ./results/perf_tensorrt_${CAT}.txt
 
     if [ $? -eq 0 ]; then
         echo "✅ [SUCCÈS GLOBAL] Moteur TensorRT créé et benchmarké pour $CAT !"
-        echo "🧹 Nettoyage des modèles (ONNX, .pt, .engine) pour libérer de l'espace..."
+        echo "🧹 Nettoyage des modèles PyTorch et ONNX pour libérer de l'espace..."
         rm -rf ./results/efficientad/${CAT}
     else
         echo "❌ Échec de la compilation TensorRT pour $CAT."
