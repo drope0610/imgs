@@ -56,7 +56,14 @@ echo -e "\n>>> 3. Affichage du bilan des performances (AU-ROC / AU-PRO)..."
 python mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
 
 echo -e "\n>>> 4. Exportation des résultats pour Excel..."
-python scripts/export_metrics_csv.py
+USB_PATH=$1
+
+if [ -n "$USB_PATH" ] && [ -d "$USB_PATH" ]; then
+    echo "💾 Clé USB détectée, sauvegarde directe du CSV sur : $USB_PATH"
+    python scripts/export_metrics_csv.py --output_dir "$USB_PATH" --filename "winclip_benchmark.csv"
+else
+    python scripts/export_metrics_csv.py --filename "winclip_benchmark.csv"
+fi
 
 # Désactivation finale pour rendre le terminal propre à l'utilisateur
 conda deactivate

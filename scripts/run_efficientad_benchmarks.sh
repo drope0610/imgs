@@ -47,7 +47,14 @@ echo -e "\n>>> Affichage du bilan (AU-ROC / AU-PRO)..."
 python mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
 
 echo -e "\n>>> Exportation des résultats pour Excel..."
-python scripts/export_metrics_csv.py
+USB_PATH=$1
+
+if [ -n "$USB_PATH" ] && [ -d "$USB_PATH" ]; then
+    echo "💾 Clé USB détectée, sauvegarde directe du CSV sur : $USB_PATH"
+    python scripts/export_metrics_csv.py --output_dir "$USB_PATH" --filename "efficientad_benchmark.csv"
+else
+    python scripts/export_metrics_csv.py --filename "efficientad_benchmark.csv"
+fi
 
 conda deactivate
 echo -e "\n=========================================================="
