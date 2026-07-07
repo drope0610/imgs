@@ -55,6 +55,9 @@ fi
 echo -e "\n>>> 3. Affichage du bilan des performances (AU-ROC / AU-PRO)..."
 python mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
 
+echo -e "\n>>> 4. Exportation des résultats pour Excel..."
+python scripts/export_metrics_csv.py
+
 # Désactivation finale pour rendre le terminal propre à l'utilisateur
 conda deactivate
 
