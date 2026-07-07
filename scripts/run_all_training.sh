@@ -42,13 +42,19 @@ do
         fi
     fi
 
-    # 3. Compilation TensorRT optimisée (FP16 & INT8 pour Jetson)
-    # On sauvegarde les logs de trtexec (qui contiennent les FPS et Latence)
+    # 3. Calibration INT8
+    CACHE_FILE="./results/efficientad/${CAT}/efficientad_${CAT}_calib.cache"
+    IMAGE_DIR="./mvtec_anomaly_detection/${CAT}/train/good/"
+    echo "🧠 Génération du cache de calibration INT8..."
+    python3 src/deploy/generate_calibration.py --onnx_path=$ONNX_PATH --image_dir=$IMAGE_DIR --cache_file=$CACHE_FILE
+
+    # 4. Compilation TensorRT optimisée (FP16 & INT8 pour Jetson)
     mkdir -p ./results/engines
+    echo "🛠️ Compilation du moteur TensorRT (FP16 & INT8)..."
     $TRTEXEC_CMD \
         --onnx=$ONNX_PATH \
         --saveEngine=./results/engines/efficientad_${CAT}.engine \
-        --fp16 --int8 | tee ./results/perf_tensorrt_${CAT}.txt
+        --fp16 --int8 --calib=$CACHE_FILE | tee ./results/perf_tensorrt_${CAT}.txt
 
     if [ $? -eq 0 ]; then
         echo "✅ [SUCCÈS GLOBAL] Moteur TensorRT créé et benchmarké pour $CAT !"
