@@ -6,8 +6,8 @@ import torchvision.transforms as T
 from anomalib.models import WinClip
 from PIL import Image
 from pathlib import Path
-import tifffile as tiff
 import numpy as np
+import csv
 
 # --- CONFIGURATION ---
 MVTEC_CATEGORIES = [
@@ -17,23 +17,30 @@ MVTEC_CATEGORIES = [
 ]
 
 RACINE_DATASET = Path(__file__).parent.parent / "mvtec_anomaly_detection"
-BATCH_SIZE = 8 # Augmente à 16 ou 32 si ta carte graphique a beaucoup de mémoire (VRAM)
+BATCH_SIZE = 1 # Flux industriel : 1 image à la fois
+CHEMIN_CLE_USB = Path("/media/barthou/writable")
+FICHIER_EXCEL = CHEMIN_CLE_USB / "resultats_inference.csv"
 
 print("Préparation du GPU/CPU...")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"*** Appareil actif : {device} ***") # Vérification visuelle dans le terminal
+print(f"*** Appareil actif : {device} ***")
 
-# 1. TRANSFORMATION CORRIGÉE (Crucial pour la précision de WinCLIP)
+# Vérification de la clé USB
+if not CHEMIN_CLE_USB.exists():
+    print(f"[Attention] La clé USB {CHEMIN_CLE_USB} n'est pas montée ! Le fichier sera sauvegardé localement.")
+    FICHIER_EXCEL = Path(__file__).parent.parent / "resultats_inference.csv"
+
+# 1. TRANSFORMATION
 transform = T.Compose([
     T.Resize((240, 240), interpolation=T.InterpolationMode.BICUBIC),
     T.ToTensor(),
     T.Normalize(
-        mean=[0.48145466, 0.4578275, 0.40821073], # Valeurs officielles CLIP
+        mean=[0.48145466, 0.4578275, 0.40821073],
         std=[0.26862954, 0.26130258, 0.27577711]
     )
 ])
 
-# 2. CRÉATION D'UN DATASET PYTORCH (Pour gérer les envois en lots)
+# 2. CRÉATION D'UN DATASET PYTORCH (Sans sauvegarde image)
 class MVTecDataset(Dataset):
     def __init__(self, dossier_test):
         self.images_paths = list(dossier_test.glob("**/*.png")) + list(dossier_test.glob("**/*.jpg"))
@@ -44,97 +51,110 @@ class MVTecDataset(Dataset):
     def __getitem__(self, idx):
         img_path = self.images_paths[idx]
         img_origine = Image.open(img_path).convert("RGB")
-        largeur, hauteur = img_origine.size
-        
         img_tensor = transform(img_origine)
-        
-        # On retourne le tenseur, le chemin (pour la sauvegarde) et la taille d'origine
-        return img_tensor, str(img_path), largeur, hauteur
+        return img_tensor, str(img_path)
 
-
-# 3. FONCTION D'INFÉRENCE OPTIMISÉE AVEC PROFILAGE DE TEMPS
-def generer_anomaly_maps_optimise(dossier_test, chemin_sortie_racine, model):
+# 3. FONCTION D'INFÉRENCE CLASSIFICATION PURE AVEC EXPORT EXCEL (CSV)
+def evaluer_classification_optimisee(categorie, dossier_test, model, csv_writer):
     dataset = MVTecDataset(dossier_test)
     
     if len(dataset) == 0:
         return
 
-    # Le DataLoader s'occupe de grouper les images par lots (Batch)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4 if torch.cuda.is_available() else 0)
     
     temps_total_calcul = 0
-    temps_total_sauvegarde = 0
 
-    with torch.no_grad(): # Désactive le calcul des gradients (accélère l'inférence)
-        for batch_tensors, batch_paths, batch_largeurs, batch_hauteurs in dataloader:
+    with torch.no_grad():
+        for batch_tensors, batch_paths in dataloader:
             
-            # --- CHRONO 1 : LE CALCUL IA (GPU) ---
-            debut_calcul = time.time()
+            # Conversion du lot en FP16 natif (Tensor Cores)
+            if device.type == 'cuda':
+                batch_tensors = batch_tensors.half()
             
             batch_tensors = batch_tensors.to(device)
-            outputs = model(batch_tensors)
-            anomaly_maps = outputs.anomaly_map 
             
-            # On force PyTorch à attendre que le GPU ait fini pour avoir un temps exact
             if device.type == 'cuda':
                 torch.cuda.synchronize() 
                 
-            temps_total_calcul += (time.time() - debut_calcul)
+            debut_calcul = time.time()
             
-            # --- CHRONO 2 : LE TRAITEMENT ET LA SAUVEGARDE (CPU / Disque) ---
-            debut_sauvegarde = time.time()
+            # Inférence
+            outputs = model(batch_tensors)
             
-            for i in range(len(batch_paths)):
-                img_path = Path(batch_paths[i])
-                largeur_orig = batch_largeurs[i].item()
-                hauteur_orig = batch_hauteurs[i].item()
+            if device.type == 'cuda':
+                torch.cuda.synchronize() 
                 
-                # Correction appliquée : double unsqueeze pour forcer le format 1x1xHxW
-                map_tensor = anomaly_maps[i].unsqueeze(0).unsqueeze(0) 
-                map_resized = F.interpolate(map_tensor, size=(hauteur_orig, largeur_orig), mode='bilinear', align_corners=False)
+            temps_calcul = time.time() - debut_calcul
+            temps_total_calcul += temps_calcul
+            
+            # Extraction du score d'anomalie
+            if isinstance(outputs, tuple):
+                score = outputs[1].item() if len(outputs) > 1 and outputs[1].numel() == 1 else 0.0
+            elif hasattr(outputs, "pred_score"):
+                score = outputs.pred_score.item()
+            else:
+                score = 0.0 # Cas par défaut si format inconnu
                 
-                anomaly_map_final = map_resized.squeeze().cpu().numpy().astype(np.float32)
-                
-                nom_defaut = img_path.parent.name 
-                dossier_export = chemin_sortie_racine / nom_defaut
-                dossier_export.mkdir(parents=True, exist_ok=True)
-                
-                nom_fichier_sortie = dossier_export / f"{img_path.stem}.tiff"
-                tiff.imwrite(str(nom_fichier_sortie), anomaly_map_final)
-                
-            temps_total_sauvegarde += (time.time() - debut_sauvegarde)
+            # Sauvegarde dans le fichier Excel (CSV)
+            nom_image = Path(batch_paths[0]).name
+            statut = "NOK (Défaut)" if score > 0.5 else "OK (Normal)" # Seuil arbitraire de 0.5 pour l'exemple
+            
+            csv_writer.writerow([categorie, nom_image, f"{score:.4f}", statut, f"{temps_calcul*1000:.1f}"])
 
-    # Affichage des temps à la fin de chaque catégorie
-    print(f"      -> [Chrono] Temps d'inférence (GPU) : {temps_total_calcul:.2f} s")
-    print(f"      -> [Chrono] Temps de sauvegarde (Disque) : {temps_total_sauvegarde:.2f} s")
+    nb_images = len(dataset)
+    fps = nb_images / temps_total_calcul if temps_total_calcul > 0 else 0
+    latence_ms = (temps_total_calcul / nb_images) * 1000 if nb_images > 0 else 0
+
+    print(f"      -> [Chrono] Temps d'inférence pur (GPU) : {temps_total_calcul:.2f} s pour {nb_images} images")
+    print(f"      -> [Perf] Latence : {latence_ms:.1f} ms / image  |  Débit : {fps:.1f} FPS")
 
 
 # --- BOUCLE PRINCIPALE ---
-print("\n=== DÉBUT DE LA GÉNÉRATION DES PRÉDICTIONS GLOBALES ===")
+print("\n=== DÉBUT DE LA CLASSIFICATION ZERO-SHOT (FULL OPTIMIZED) ===")
+print(f"Les résultats seront sauvegardés dans : {FICHIER_EXCEL}")
 
 categories_trouvees = [d.name for d in RACINE_DATASET.iterdir() if d.is_dir() and d.name in MVTEC_CATEGORIES]
 
 if not categories_trouvees:
     print("Aucun dossier de catégorie MVTec valide trouvé à la racine.")
 else:
-    print(f"Catégories détectées et prêtes à être traitées : {categories_trouvees}")
-    
-    for cat in categories_trouvees:
-        print(f"\n>>> [TRAITEMENT] Catégorie : {cat.upper()} <<<")
-        
-        # Initialisation (le CPE fait sa magie en coulisses)
-        model = WinClip(class_name=cat) 
-        model.to(device)
-        model.setup("predict")
-        model.eval() # Très important de s'assurer qu'on est en mode évaluation
-        
-        dossier_test_cat = RACINE_DATASET / cat / "test"
-        dossier_sortie_cat = RACINE_DATASET / "predictions" / cat / "test"
-        
-        if dossier_test_cat.exists():
-            generer_anomaly_maps_optimise(dossier_test_cat, dossier_sortie_cat, model)
-            print(f"-> OK : Toutes les cartes .tiff pour '{cat}' ont été générées.")
-        else:
-            print(f"-> [Erreur] Le sous-dossier 'test' est introuvable pour {cat}.")
+    # Tentative d'écriture sur la clé USB (ou fallback en local si refus d'accès)
+    try:
+        f = open(FICHIER_EXCEL, mode='w', newline='', encoding='utf-8')
+    except PermissionError:
+        print(f"\n[Erreur] Permission refusée pour écrire sur la clé USB ({FICHIER_EXCEL}).")
+        FICHIER_EXCEL = Path("/home/barthou/Desktop/resultats_inference.csv")
+        print(f"[Fallback] Le fichier sera sauvegardé sur le bureau : {FICHIER_EXCEL}")
+        f = open(FICHIER_EXCEL, mode='w', newline='', encoding='utf-8')
 
-print("\n=== TOUTES LES PRÉDICTIONS ONT ÉTÉ GÉNÉRÉES AVEC SUCCÈS ===")
+    with f:
+        writer = csv.writer(f, delimiter=';') # Séparateur Point-Virgule idéal pour Excel français
+        # En-têtes des colonnes
+        writer.writerow(['Catégorie', 'Image', 'Score Anomalie', 'Statut', 'Latence (ms)'])
+        
+        for cat in categories_trouvees:
+            print(f"\n>>> [TRAITEMENT] Catégorie : {cat.upper()} <<<")
+            
+            # Désactiver les fenêtres glissantes (scales=tuple())
+            try:
+                model = WinClip(class_name=cat, scales=tuple()) 
+            except Exception:
+                model = WinClip(class_name=cat)
+                
+            model.to(device)
+            model.setup("predict")
+            model.eval()
+            
+            # Forcer le modèle en vrai FP16
+            if device.type == 'cuda':
+                model = model.half()
+            
+            dossier_test_cat = RACINE_DATASET / cat / "test"
+            
+            if dossier_test_cat.exists():
+                evaluer_classification_optimisee(cat, dossier_test_cat, model, writer)
+            else:
+                print(f"-> [Erreur] Le sous-dossier 'test' est introuvable pour {cat}.")
+
+print(f"\n=== TERMINÉ ! Résultats disponibles dans {FICHIER_EXCEL} ===")

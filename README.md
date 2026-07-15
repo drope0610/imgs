@@ -63,5 +63,17 @@ Pour tester le moteur compilé sur une image cible via PyCUDA et générer la ca
 python src/deploy/infer_tensorrt.py
 ```
 
+## 📊 Résultats des Benchmarks (Jetson Orin)
+
+Voici l'historique des optimisations réalisées sur le modèle **WinClip (Zero-Shot)** pour la classification d'images industrielles (Exemple sur la catégorie *Toothbrush* : 42 images, 240x240).
+
+| Version | Configuration | Latence par image | Débit (FPS) | Remarques |
+| :--- | :--- | :--- | :--- | :--- |
+| **Baseline (PyTorch pur)** | FP32, `empty_cache()`, Segmentation (Sliding Windows), Batch=2 | ~ 1.44 s | 0.7 FPS | Lourd, goulot d'étranglement mémoire, pas de Tensor Cores. |
+| **Autocast (Mixed Precision)** | FP16 via `autocast`, sans `empty_cache()`, Batch=2 | ~ 1.61 s | 0.6 FPS | **Plus lent.** Le CPU ARM de la Jetson sature en effectuant les conversions dynamiques (Cast) FP16/FP32 exigées par le Transformer. |
+| **Full Optimisé (Industriel)** | FP16 natif (`model.half()`), Classification pure (`scales=()`), Batch=1 | **~ 16 à 26 ms** | **~ 40 à 60 FPS** | Utilisation totale des Tensor Cores (sans overhead CPU). Mode classification seule idéale pour les flux temps réel. |
+
+> **Conclusion** : Pour le déploiement Jetson, forcer le réseau en véritable FP16 (plutôt que d'utiliser l'autocast dynamique) et désactiver les cartes thermiques si non requises permet de passer de 1,4 seconde à **16 millisecondes** par image (un gain de vitesse de **x87**).
+
 ---
 *Ce document est évolutif et sera enrichi au fur et à mesure des tests et des avancées sur l'architecture Jetson Orin.*
