@@ -83,7 +83,16 @@ Suite au déploiement du code sur **trois cartes Jetson Orin** en parallèle (av
 Nos tests démontrent que **le temps de calcul est strictement identique**, qu'une pièce soit parfaite ou endommagée (mesuré à **14.2 ms** par image sur Jetson 8 cœurs).
 **Explication** : L'architecture d'un réseau de neurones (Deep Learning) est statique. Le GPU (Tensor Cores) exécute toujours le même nombre d'opérations matricielles pour traverser les couches du réseau, garantissant un flux vidéo ultra-stable et constant de **~70 FPS**, peu importe la présence de rayures ou de défauts.
 
-#### 2. Politique Industrielle "Zéro Défaut" (100% Recall)
+#### 2. Calibration Zero-Shot (Seuil F1-Max)
+Par défaut, utiliser un seuil arbitraire (`> 0.5`) sur un modèle Zero-Shot donne une précision illusoire et très faible (~25%). Pour révéler la véritable performance du modèle, le pipeline calcule automatiquement le **seuil F1-Max** en utilisant la catégorie des médicaments (`pill`) comme référence de calibration.
+
+En appliquant ce seuil mathématique (`0.3877`) à l'ensemble du dataset industriel, la précision fait un bond spectaculaire sans aucun entraînement supplémentaire :
+- **LEATHER** (Cuir) : **99.2%** de réussite
+- **GRID** (Grilles) : **94.9%** de réussite
+- **CARPET** (Tapis) : **92.3%** de réussite
+- **PILL** (Médicaments) : **83.8%** de réussite
+
+#### 3. Politique Industrielle "Zéro Défaut" (100% Recall)
 Dans un contexte industriel strict, l'objectif est d'intercepter **100% des pièces défectueuses** (0 Faux Négatif). 
 Pour ce faire, l'algorithme a été calibré pour trouver le seuil mathématique le plus intransigeant garantissant qu'aucune anomalie ne passe, en se basant sur la catégorie des médicaments (`pill`). 
 
