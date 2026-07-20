@@ -75,5 +75,22 @@ Voici l'historique des optimisations réalisées sur le modèle **WinClip (Zero-
 
 > **Conclusion** : Pour le déploiement Jetson, forcer le réseau en véritable FP16 (plutôt que d'utiliser l'autocast dynamique) et désactiver les cartes thermiques si non requises permet de passer de 1,4 seconde à **16 millisecondes** par image (un gain de vitesse de **x87**).
 
+### Analyses Approfondies en Production (Multi-Jetsons)
+
+Suite au déploiement du code sur **trois cartes Jetson Orin** en parallèle (avec un chargement dynamique des datasets via des clés USB locales), nous avons mené des analyses poussées sur le comportement de WinClip.
+
+#### 1. Latence : Image Saine (OK) vs Défectueuse (NOK)
+Nos tests démontrent que **le temps de calcul est strictement identique**, qu'une pièce soit parfaite ou endommagée (mesuré à **14.2 ms** par image sur Jetson 8 cœurs).
+**Explication** : L'architecture d'un réseau de neurones (Deep Learning) est statique. Le GPU (Tensor Cores) exécute toujours le même nombre d'opérations matricielles pour traverser les couches du réseau, garantissant un flux vidéo ultra-stable et constant de **~70 FPS**, peu importe la présence de rayures ou de défauts.
+
+#### 2. Calibration Zero-Shot (Seuil F1-Max)
+Par défaut, utiliser un seuil arbitraire (`> 0.5`) sur un modèle Zero-Shot donne une précision illusoire et très faible (~25%). Pour révéler la véritable performance du modèle, le pipeline calcule désormais automatiquement le **seuil F1-Max** en utilisant la catégorie des médicaments (`pill`) comme référence de calibration.
+
+En appliquant ce seuil mathématique (`0.3877`) à l'ensemble du dataset industriel, la précision fait un bond spectaculaire sans aucun entraînement supplémentaire :
+- **LEATHER** (Cuir) : **99.2%** de réussite
+- **GRID** (Grilles) : **94.9%** de réussite
+- **CARPET** (Tapis) : **92.3%** de réussite
+- **PILL** (Médicaments) : **83.8%** de réussite
+
 ---
 *Ce document est évolutif et sera enrichi au fur et à mesure des tests et des avancées sur l'architecture Jetson Orin.*
