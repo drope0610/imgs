@@ -83,14 +83,17 @@ Suite au déploiement du code sur **trois cartes Jetson Orin** en parallèle (av
 Nos tests démontrent que **le temps de calcul est strictement identique**, qu'une pièce soit parfaite ou endommagée (mesuré à **14.2 ms** par image sur Jetson 8 cœurs).
 **Explication** : L'architecture d'un réseau de neurones (Deep Learning) est statique. Le GPU (Tensor Cores) exécute toujours le même nombre d'opérations matricielles pour traverser les couches du réseau, garantissant un flux vidéo ultra-stable et constant de **~70 FPS**, peu importe la présence de rayures ou de défauts.
 
-#### 2. Calibration Zero-Shot (Seuil F1-Max)
-Par défaut, utiliser un seuil arbitraire (`> 0.5`) sur un modèle Zero-Shot donne une précision illusoire et très faible (~25%). Pour révéler la véritable performance du modèle, le pipeline calcule désormais automatiquement le **seuil F1-Max** en utilisant la catégorie des médicaments (`pill`) comme référence de calibration.
+#### 2. Politique Industrielle "Zéro Défaut" (100% Recall)
+Dans un contexte industriel strict, l'objectif est d'intercepter **100% des pièces défectueuses** (0 Faux Négatif). 
+Pour ce faire, l'algorithme a été calibré pour trouver le seuil mathématique le plus intransigeant garantissant qu'aucune anomalie ne passe, en se basant sur la catégorie des médicaments (`pill`). 
 
-En appliquant ce seuil mathématique (`0.3877`) à l'ensemble du dataset industriel, la précision fait un bond spectaculaire sans aucun entraînement supplémentaire :
-- **LEATHER** (Cuir) : **99.2%** de réussite
-- **GRID** (Grilles) : **94.9%** de réussite
-- **CARPET** (Tapis) : **92.3%** de réussite
-- **PILL** (Médicaments) : **83.8%** de réussite
+**Résultats de la politique Zéro Défaut avec WinClip (Zero-Shot) :**
+- **Défauts interceptés** : **100%** (Les 141 médicaments défectueux ont bien été rejetés).
+- **Faux Positifs (Pièces saines jetées à tort)** : **100%** (Les 26 médicaments parfaitement sains ont aussi été jetés !).
+
+**Explication** : Le modèle actuel (WinClip) est un algorithme *Zero-Shot* (il n'a jamais été entraîné sur nos pièces spécifiques). Pour s'assurer de détecter les défauts les plus microscopiques, on doit abaisser son seuil de tolérance de manière si drastique qu'il devient "paranoïaque" et considère la moindre variation de texture d'une pièce parfaite comme une anomalie.
+
+**Conclusion** : Une politique "Zéro Défaut" stricte est inapplicable avec un modèle Zero-Shot en production, car elle engendre beaucoup trop de faux rejets (perte sèche). Le passage à un modèle entraîné sur mesure (comme **EfficientAd**) est absolument indispensable pour maintenir 100% d'interception des défauts tout en préservant les pièces saines.
 
 ---
 *Ce document est évolutif et sera enrichi au fur et à mesure des tests et des avancées sur l'architecture Jetson Orin.*

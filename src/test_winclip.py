@@ -66,22 +66,26 @@ class MVTecDataset(Dataset):
         return img_tensor, str(img_path)
 
 def get_best_threshold(scores, labels):
-    best_f1 = 0
-    best_thresh = 0.5
+    best_thresh = min(scores) - 0.01 if scores else 0.0
+    min_fp = float('inf')
     thresholds = sorted(list(set(scores)))
+    
     for t in thresholds:
         tp = sum(1 for s, l in zip(scores, labels) if s > t and l == 1)
         fp = sum(1 for s, l in zip(scores, labels) if s > t and l == 0)
         fn = sum(1 for s, l in zip(scores, labels) if s <= t and l == 1)
         
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        
-        if precision + recall > 0:
-            f1 = 2 * (precision * recall) / (precision + recall)
-            if f1 > best_f1:
-                best_f1 = f1
+        # Règle industrielle stricte : 100% de réussite sur les défauts (Aucun faux négatif)
+        if fn == 0:
+            if fp < min_fp:
+                min_fp = fp
                 best_thresh = t
+                
+    total_ok = sum(1 for l in labels if l == 0)
+    faux_positifs_pct = (min_fp / total_ok) * 100 if total_ok > 0 else 0
+    print(f"-> Politique Zéro Défaut validée (100% des défauts trouvés).")
+    print(f"-> Taux de Faux Positifs (Pièces saines jetées à tort) : {faux_positifs_pct:.1f}% ({min_fp}/{total_ok})")
+    
     return best_thresh
 
 # 3. FONCTION D'INFÉRENCE CLASSIFICATION PURE AVEC EXPORT EXCEL (CSV)
