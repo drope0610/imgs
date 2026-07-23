@@ -111,7 +111,7 @@ L'architecture EfficientAD (modèle "Étudiant-Professeur") s'entraîne spécifi
 | Entraînement | Latence PyTorch (Natif) | Zéro Défaut (Rappel Défauts) | Faux Positifs (Rejets abusifs) |
 | :--- | :--- | :--- | :--- |
 | **10 Époques** (Test Validation) | ~60.8 ms | 100% (Validé) | 96.2% (25/26 pièces jetées) |
-| **250 Époques** (Test Intermédiaire) | ~60.5 ms | 100% (Validé) | **69.2%** (18/26 pièces jetées) |
+| **200 Époques** (Test Intermédiaire) | ~60.5 ms | 100% (Validé) | **69.2%** (18/26 pièces jetées) |
 
 *Note : Bien que le taux de fausses alertes soit passé de 96.2% à 69.2%, cela reste insuffisant pour de la production industrielle. L'algorithme mathématique d'EfficientAD imposant un `batch_size` de 1, la prochaine étape pour atteindre les objectifs de performance (<5% FP) est d'augmenter massivement le nombre d'époques d'entraînement (ex: 1000+).*
 
