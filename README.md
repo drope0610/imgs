@@ -98,11 +98,22 @@ Pour ce faire, l'algorithme a été calibré pour trouver le seuil mathématique
 
 **Résultats de la politique Zéro Défaut avec WinClip (Zero-Shot) :**
 - **Défauts interceptés** : **100%** (Les 141 médicaments défectueux ont bien été rejetés).
-- **Faux Positifs (Pièces saines jetées à tort)** : **100%** (Les 26 médicaments parfaitement sains ont aussi été jetés !).
+- **Faux Positifs (Pièces saines jetées à tort)** : **96.2%** (Les pièces parfaitement saines ont presque toutes été jetées !).
 
 **Explication** : Le modèle actuel (WinClip) est un algorithme *Zero-Shot* (il n'a jamais été entraîné sur nos pièces spécifiques). Pour s'assurer de détecter les défauts les plus microscopiques, on doit abaisser son seuil de tolérance de manière si drastique qu'il devient "paranoïaque" et considère la moindre variation de texture d'une pièce parfaite comme une anomalie.
 
 **Conclusion** : Une politique "Zéro Défaut" stricte est inapplicable avec un modèle Zero-Shot en production, car elle engendre beaucoup trop de faux rejets (perte sèche). Le passage à un modèle entraîné sur mesure (comme **EfficientAd**) est absolument indispensable pour maintenir 100% d'interception des défauts tout en préservant les pièces saines.
+
+## 📊 Résultats : Efficace (EfficientAD - Sur-mesure)
+
+L'architecture EfficientAD (modèle "Étudiant-Professeur") s'entraîne spécifiquement sur des images de pièces saines pour comprendre la normalité absolue de notre produit (Médicaments / `pill`). Le but est de drastiquement réduire les fausses alertes sans compromettre la politique du Zéro Défaut.
+
+| Entraînement | Latence PyTorch (Natif) | Zéro Défaut (Rappel Défauts) | Faux Positifs (Rejets abusifs) |
+| :--- | :--- | :--- | :--- |
+| **10 Époques** (Test Validation) | ~60.8 ms | 100% (Validé) | 96.2% (25/26 pièces jetées) |
+| **250 Époques** (Test Intermédiaire) | ~60.5 ms | 100% (Validé) | **69.2%** (18/26 pièces jetées) |
+
+*Note : Bien que le taux de fausses alertes soit passé de 96.2% à 69.2%, cela reste insuffisant pour de la production industrielle. L'algorithme mathématique d'EfficientAD imposant un `batch_size` de 1, la prochaine étape pour atteindre les objectifs de performance (<5% FP) est d'augmenter massivement le nombre d'époques d'entraînement (ex: 1000+).*
 
 ---
 *Ce document est évolutif et sera enrichi au fur et à mesure des tests et des avancées sur l'architecture Jetson Orin.*

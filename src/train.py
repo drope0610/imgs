@@ -6,6 +6,15 @@ from anomalib.models import EfficientAd
 from anomalib.engine import Engine
 from anomalib.deploy import ExportType
 
+import rich.console
+rich.console.Console.clear_live = lambda self: None
+
+if not hasattr(torch, "distributed"):
+    import types
+    torch.distributed = types.ModuleType("distributed")
+if not hasattr(torch.distributed, "is_initialized"):
+    torch.distributed.is_initialized = lambda: False
+
 def check_gpu():
     print("="*50)
     print("VÉRIFICATION DU MATÉRIEL GPU")
@@ -39,7 +48,22 @@ def main():
 
     device = check_gpu()
     category = args.category
-    dataset_root = os.path.abspath("./mvtec_anomaly_detection")
+    
+    from pathlib import Path
+    paths_possibles = [
+        Path("/media/pedro/Modeles/mvtec_anomaly_detection"),
+        Path("/media/pedro2/Modeles/mvtec_anomaly_detection"),
+        Path("./mvtec_anomaly_detection")
+    ]
+    
+    dataset_root = None
+    for p in paths_possibles:
+        if p.exists() and p.is_dir():
+            dataset_root = str(p)
+            break
+            
+    if dataset_root is None:
+        raise FileNotFoundError("Impossible de trouver le dataset MVTec sur la clé USB ou en local.")
 
     print(f"📦 Chargement du dataset MVTec pour la catégorie : {category}")
     
