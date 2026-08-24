@@ -10,6 +10,15 @@ L'objectif principal est d'optimiser ces modèles pour une exécution ultra-rapi
 - **Déploiement TensorRT** : Export automatisé des modèles PyTorch vers ONNX, puis compilation en moteurs TensorRT (`.engine`) avec quantification **FP16** et **INT8** pour maximiser le framerate (FPS) sur Jetson Orin.
 - **Inférence Bas Niveau** : Scripts d'inférence (via `pycuda`) gérant la mémoire Pagelocked pour des transferts Host-to-Device sans goulot d'étranglement.
 
+## 💻 Matériel Cible : NVIDIA Jetson Orin
+
+Les entraînements et les optimisations TensorRT de ce projet sont conçus pour exploiter au maximum l'architecture matérielle de la carte embarquée **NVIDIA Jetson Orin (32GB)** :
+- **Architecture GPU** : NVIDIA Ampere (Compute Capability 8.7)
+- **Unités de calcul** : 8 Streaming Multiprocessors (SMs)
+- **Mémoire Unifiée** : ~32 Go LPDDR5 (Partagée entre CPU et GPU pour éviter les transferts PCIe)
+- **Accélération IA** : Tensor Cores actifs (Cruciaux pour l'inférence TensorRT en précision mixte FP16 et INT8)
+- **Stockage** : Disque M.2 NVMe ultra-rapide (Réduit le temps de chargement des datasets par 7 comparé à l'USB)
+
 ## 📂 Structure du Projet
 
 ```text
