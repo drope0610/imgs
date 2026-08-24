@@ -1,75 +1,55 @@
-import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
-import numpy as np
-import cv2
+import argparse
+import sys
 import os
+import cv2
+import numpy as np
 
-# Paramètres globaux
-ENGINE_PATH = "./results/efficientad/bottle/efficientad_bottle.engine"
-IMAGE_PATH = "./mvtec_anomaly_detection/bottle/test/broken_large/000.png" # Test sur une bouteille cassée
-OUTPUT_PATH = "resultat_anomalie.png"
-
-# Initialisation du logger TensorRT
-TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-
-def load_engine(engine_path):
-    print(f"⚙️ Chargement du moteur TensorRT : {engine_path}")
-    with open(engine_path, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
-        return runtime.deserialize_cuda_engine(f.read())
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from src.deploy.trt_engine import TensorRTEngine
+from src.config import get_dataset_root, get_results_dir
 
 def main():
-    # 1. Chargement du moteur et contexte
-    engine = load_engine(ENGINE_PATH)
-    context = engine.create_execution_context()
+    parser = argparse.ArgumentParser(description="Inférence unitaire TensorRT pour Anomalib")
+    parser.add_argument("--category", type=str, default="capsule", help="Catégorie (ex: capsule)")
+    parser.add_argument("--image", type=str, help="Chemin vers l'image de test. Si vide, cherche la première image.")
+    parser.add_argument("--engine", type=str, help="Chemin vers le fichier .engine. Si vide, cherche le fp16.")
+    parser.add_argument("--output", type=str, default="resultat_anomalie.png", help="Fichier de sortie")
+    args = parser.parse_args()
 
-    # 2. Récupération DYNAMIQUE des infos d'entrée/sortie
-    input_name = engine.get_tensor_name(0)
-    output_name = engine.get_tensor_name(1)
+    # Résolution des chemins dynamiques
+    if args.engine:
+        engine_path = args.engine
+    else:
+        engine_path = str(get_results_dir() / "engines" / f"efficientad_{args.category}_fp16.engine")
 
-    input_shape = engine.get_tensor_shape(input_name)
-    output_shape = engine.get_tensor_shape(output_name)
+    if args.image:
+        image_path = args.image
+    else:
+        dataset_root = get_dataset_root() / args.category / "test"
+        # Chercher un défaut quelconque (hors dossier "good")
+        import glob
+        defect_dirs = [d for d in glob.glob(f"{dataset_root}/*") if "good" not in d]
+        if defect_dirs:
+            imgs = glob.glob(f"{defect_dirs[0]}/*.png")
+            if imgs:
+                image_path = imgs[0]
+            else:
+                raise FileNotFoundError(f"Aucune image trouvée dans {defect_dirs[0]}")
+        else:
+            raise FileNotFoundError(f"Aucun dossier de défaut trouvé dans {dataset_root}")
 
-    # trt.nptype permet de traduire le type TensorRT en type NumPy (souvent float32)
-    input_dtype = trt.nptype(engine.get_tensor_dtype(input_name))
-    output_dtype = trt.nptype(engine.get_tensor_dtype(output_name))
+    if not os.path.exists(engine_path):
+        raise FileNotFoundError(f"Moteur TensorRT introuvable : {engine_path}")
 
-    print(f"📊 Info Entrée : Shape {input_shape} | Type {input_dtype}")
-    print(f"📊 Info Sortie  : Shape {output_shape} | Type {output_dtype}")
+    # 1. Chargement du moteur
+    print(f"⚙️ Chargement du moteur TensorRT : {engine_path}")
+    engine = TensorRTEngine(engine_path)
 
-    # 3. Allocation de la mémoire sécurisée (Pagelocked)
-    h_input = cuda.pagelocked_empty(trt.volume(input_shape), dtype=input_dtype)
-    h_output = cuda.pagelocked_empty(trt.volume(output_shape), dtype=output_dtype)
-
-    d_input = cuda.mem_alloc(h_input.nbytes)
-    d_output = cuda.mem_alloc(h_output.nbytes)
-    
-    context.set_tensor_address(input_name, int(d_input))
-    context.set_tensor_address(output_name, int(d_output))
-
-# On remplace le 'if' par une boucle pour gérer TOUS les tenseurs restants (index 2, 3, 4, etc.)
-    memory_refs = [] # Pour éviter que Python ne vide la mémoire GPU trop tôt
-    
-    for i in range(2, engine.num_io_tensors):
-        extra_name = engine.get_tensor_name(i)
-        extra_shape = engine.get_tensor_shape(extra_name)
-        extra_dtype = trt.nptype(engine.get_tensor_dtype(extra_name))
-        
-        print(f"🔧 Allocation automatique du tenseur manquant : {extra_name} | Shape {extra_shape}")
-        
-        # On calcule la taille en octets
-        taille_octets = trt.volume(extra_shape) * np.dtype(extra_dtype).itemsize
-        
-        # On alloue la mémoire sur le GPU et on lie l'adresse
-        d_extra = cuda.mem_alloc(taille_octets)
-        context.set_tensor_address(extra_name, int(d_extra))
-        
-        memory_refs.append(d_extra)
-    # 4. Préparation de l'image
-    print("📸 Préparation de l'image...")
-    img = cv2.imread(IMAGE_PATH)
+    # 2. Préparation de l'image
+    print(f"📸 Préparation de l'image : {image_path}")
+    img = cv2.imread(image_path)
     if img is None:
-        raise FileNotFoundError(f"Image introuvable : {IMAGE_PATH}")
+        raise FileNotFoundError(f"Image illisible : {image_path}")
 
     original_img = cv2.resize(img, (256, 256))
     img_rgb = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
@@ -79,31 +59,19 @@ def main():
     img_transposed = np.transpose(img_normalized, (2, 0, 1))
     img_batched = np.expand_dims(img_transposed, axis=0)
 
-    # Conversion stricte dans le format demandé par le moteur
-    img_ready = np.ascontiguousarray(img_batched, dtype=input_dtype)
+    # Conversion stricte dans le format demandé par le moteur (dynamique)
+    img_ready = np.ascontiguousarray(img_batched, dtype=engine.inputs[0]['dtype'])
     
-    # Copie des pixels de l'image dans la mémoire Pagelocked
-    np.copyto(h_input, img_ready.ravel())
-
-    # 5. Inférence !
+    # 3. Inférence asynchrone
     print("⚡ Inférence sur la Jetson Orin...")
-    stream = cuda.Stream()
+    outputs = engine.infer(img_ready)
     
-    # Copie Host -> Device depuis la mémoire pagelocked (h_input)
-    cuda.memcpy_htod_async(d_input, h_input, stream)
+    # EfficientAD donne en sortie la carte d'anomalie
+    anomaly_map = outputs[0].reshape((256, 256))
     
-    # Exécution
-    context.execute_async_v3(stream_handle=stream.handle)
-    
-    # Copie Device -> Host vers la mémoire pagelocked (h_output)
-    cuda.memcpy_dtoh_async(h_output, d_output, stream)
-    stream.synchronize()
-
-    # 6. Post-traitement et Carte de chaleur
+    # 4. Post-traitement et Carte de chaleur
     print("🎨 Génération de la carte de chaleur...")
-    anomaly_map = h_output.reshape((256, 256))
     
-    # Éviter la division par zéro lors de la normalisation
     map_min, map_max = anomaly_map.min(), anomaly_map.max()
     if map_max - map_min > 0:
         anomaly_map = (anomaly_map - map_min) / (map_max - map_min)
@@ -113,8 +81,9 @@ def main():
     heatmap = cv2.applyColorMap(anomaly_map, cv2.COLORMAP_JET)
     overlay = cv2.addWeighted(original_img, 0.6, heatmap, 0.4, 0)
     
-    cv2.imwrite(OUTPUT_PATH, overlay)
-    print(f"✅ Terminé ! Le résultat visuel est sauvegardé sous '{OUTPUT_PATH}'")
+    cv2.imwrite(args.output, overlay)
+    print(f"✅ Terminé ! Le résultat visuel est sauvegardé sous '{args.output}'")
+    print(f"Score global d'anomalie : {float(outputs[0].max()):.4f}")
 
 if __name__ == "__main__":
     main()

@@ -24,7 +24,7 @@ L'objectif principal est d'optimiser ces modèles pour une exécution ultra-rapi
 │   │   └── perf_tester.py
 │   └── deploy/                # Code d'inférence optimisé pour le matériel cible
 │       └── infer_tensorrt.py
-├── mvtec_ad_evaluation/       # Sous-module d'évaluation officiel MVTec
+├── benchmarks/mvtec_ad_evaluation/       # Sous-module d'évaluation officiel MVTec
 └── requirements.txt           # Dépendances Python nécessaires
 ```
 
@@ -104,6 +104,16 @@ Pour ce faire, l'algorithme a été calibré pour trouver le seuil mathématique
 
 **Conclusion** : Une politique "Zéro Défaut" stricte est inapplicable avec un modèle Zero-Shot en production, car elle engendre beaucoup trop de faux rejets (perte sèche). Le passage à un modèle entraîné sur mesure (comme **EfficientAd**) est absolument indispensable pour maintenir 100% d'interception des défauts tout en préservant les pièces saines.
 
+### Benchmarks Spécialisés : Industrie Pharmaceutique
+Ces nouveaux tests évaluent la robustesse de WinClip en Zero-Shot sur des datasets complexes liés à la pharmacie et au contrôle qualité des médicaments, exécutés sur la Jetson Orin :
+
+| Benchmark / Dataset | Catégorie | Images Évaluées | Latence (ms/img) | Débit (FPS) |
+| :--- | :--- | :--- | :--- | :--- |
+| **MVTec Pharma** | `pill` | 167 | 32.12 ms | 31.1 FPS |
+| **MVTec Pharma** | `capsule` | 132 | 24.66 ms | 40.6 FPS |
+| **VisA** | `capsules` | 702 | 34.42 ms | 29.0 FPS |
+| **PillQC** | `pill` | 15 | 64.84 ms | 15.4 FPS |
+
 ## 📊 Résultats : Efficace (EfficientAD - Sur-mesure)
 
 L'architecture EfficientAD (modèle "Étudiant-Professeur") s'entraîne spécifiquement sur des images de pièces saines pour comprendre la normalité absolue de notre produit (Médicaments / `pill`). Le but est de drastiquement réduire les fausses alertes sans compromettre la politique du Zéro Défaut.
@@ -111,9 +121,17 @@ L'architecture EfficientAD (modèle "Étudiant-Professeur") s'entraîne spécifi
 | Entraînement | Latence PyTorch (Natif) | Zéro Défaut (Rappel Défauts) | Faux Positifs (Rejets abusifs) |
 | :--- | :--- | :--- | :--- |
 | **10 Époques** (Test Validation) | ~60.8 ms | 100% (Validé) | 96.2% (25/26 pièces jetées) |
-| **200 Époques** (Test Intermédiaire) | ~60.5 ms | 100% (Validé) | **69.2%** (18/26 pièces jetées) |
+| **250 Époques** (Test Intermédiaire) | ~60.5 ms | 100% (Validé) | **69.2%** (18/26 pièces jetées) |
+| **1000 Époques** (Test Marathon 26h) | ~57.8 ms | 100% (Validé) | **88.5%** (23/26 pièces jetées) ⚠️ (Surapprentissage) |
+| **5 Époques (Optimisation NVMe)** | **~56.3 ms** | 100% (Validé) | 92.3% (24/26 pièces jetées) |
 
-*Note : Bien que le taux de fausses alertes soit passé de 96.2% à 69.2%, cela reste insuffisant pour de la production industrielle. L'algorithme mathématique d'EfficientAD imposant un `batch_size` de 1, la prochaine étape pour atteindre les objectifs de performance (<5% FP) est d'augmenter massivement le nombre d'époques d'entraînement (ex: 1000+).*
+*Note : Les résultats de l'entraînement extrême de 1000 époques révèlent une dégradation des performances due au phénomène de **surapprentissage (overfitting)**. L'architecture mathématique d'EfficientAD imposant un `batch_size` de 1, le modèle a fini par mémoriser par cœur les pièces saines du jeu d'entraînement, devenant hyper-sensible et rejetant de nouveau massivement les pièces saines lors des tests. La configuration à **250 époques** semble donc être l'optimum "Sweet Spot" pour cette catégorie.*
+
+### ⚡ Optimisation Matérielle : Disque NVMe 1To
+Pour palier aux goulots d'étranglement de la clé USB, le dataset a été migré vers un disque dur M.2 NVMe ultra-rapide sur la **Jetson Orin (Pedro2)**. Les résultats de débit des données sont fulgurants :
+- **Temps de chargement (Entraînement EfficientAD)** : Passage de ~35 secondes par époque (USB) à seulement **5 secondes par époque** (NVMe), soit une vitesse de chargement multipliée par 7 !
+- **Latence d'Inférence pure (EfficientAD)** : Très légère amélioration à **~56.3 ms**.
+- **Latence d'Inférence (WinCLIP Zero-Shot)** : Débit maintenu à environ **35 FPS** (limitée par la puissance de calcul GPU et non plus par le disque).
 
 ---
 *Ce document est évolutif et sera enrichi au fur et à mesure des tests et des avancées sur l'architecture Jetson Orin.*

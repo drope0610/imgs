@@ -1,7 +1,15 @@
 import os
 import argparse
+import shutil
+from pathlib import Path
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.config import get_dataset_root, get_results_dir
+from src.utils.augmentations import get_train_augmentations
+
 import torch
-from anomalib.data import MVTec
+from anomalib.data import MVTec, Folder
 from anomalib.models import EfficientAd
 from anomalib.engine import Engine
 from anomalib.deploy import ExportType
@@ -30,60 +38,69 @@ def check_gpu():
     return device
 
 def main():
-    # Configuration des arguments de la ligne de commande
-    parser = argparse.ArgumentParser(description="Pipeline d'entraînement MVTec AD")
-    parser.add_argument(
-        "--category", 
-        type=str, 
-        default="bottle", 
-        help="Catégorie MVTec à entraîner (ex: cable, capsule, wood...)"
-    )
-    parser.add_argument(
-        "--epochs", 
-        type=int, 
-        default=10, 
-        help="Nombre d'époques d'entraînement"
-    )
+    parser = argparse.ArgumentParser(description="Pipeline d'entraînement Unifié")
+    parser.add_argument("--category", type=str, default="capsule", help="Catégorie (ex: capsule, pillqc)")
+    parser.add_argument("--epochs", type=int, default=10, help="Nombre d'époques d'entraînement")
+    parser.add_argument("--dataset_type", type=str, default="mvtec", choices=["mvtec", "folder"], help="Format du dataset")
+    parser.add_argument("--img_size", type=int, default=256, help="Taille des images d'entraînement")
+    parser.add_argument("--run_name", type=str, default="", help="Nom du dossier de sauvegarde (optionnel)")
     args = parser.parse_args()
 
     device = check_gpu()
     category = args.category
     
-    from pathlib import Path
-    paths_possibles = [
-        Path("/media/pedro/Modeles/mvtec_anomaly_detection"),
-        Path("/media/pedro2/Modeles/mvtec_anomaly_detection"),
-        Path("./mvtec_anomaly_detection")
-    ]
+    print(f"📦 Chargement du dataset pour la catégorie : {category}")
     
-    dataset_root = None
-    for p in paths_possibles:
-        if p.exists() and p.is_dir():
-            dataset_root = str(p)
-            break
-            
-    if dataset_root is None:
-        raise FileNotFoundError("Impossible de trouver le dataset MVTec sur la clé USB ou en local.")
-
-    print(f"📦 Chargement du dataset MVTec pour la catégorie : {category}")
-    
-    datamodule = MVTec(
-        root=dataset_root,
-        category=category,
-        train_batch_size=1,
-        eval_batch_size=1,
-        num_workers=4,
-        task="segmentation"
-    )
+    if args.dataset_type == "mvtec":
+        dataset_root = get_dataset_root()
+        datamodule = MVTec(
+            root=str(dataset_root),
+            category=category,
+            train_batch_size=1,
+            eval_batch_size=1,
+            num_workers=4,
+            image_size=(args.img_size, args.img_size),
+            task="segmentation"
+        )
+    elif args.dataset_type == "folder":
+        # Specific logic for pillqc style structure
+        dataset_root = Path(f"./datasets/{category}/images")
+        if not dataset_root.exists():
+            raise FileNotFoundError(f"Dossier dataset introuvable : {dataset_root}")
+        
+        datamodule = Folder(
+            name=category,
+            root=dataset_root,
+            normal_dir="normal",
+            abnormal_dir="dirt", # stub for anomalib structure
+            image_size=(args.img_size, args.img_size),
+            train_batch_size=1,
+            eval_batch_size=1,
+            num_workers=4,
+            task="classification"
+        )
 
     print(f"🤖 Initialisation du modèle EfficientAD pour '{category}'...")
     model = EfficientAd()
 
+    # Apply Custom Data Augmentation to the training dataset
+    datamodule.setup() 
+    if hasattr(datamodule, "train_data") and datamodule.train_data is not None:
+        print("🪄 Injection des transformations custom (Data Augmentation : Inpainting & Brightness) sur le jeu d'entraînement...")
+        # Override the transform function
+        datamodule.train_data.transform = get_train_augmentations(args.img_size)
+    else:
+        print("⚠️ Impossible d'injecter la Data Augmentation, `train_data` non trouvé.")
+
+    results_dir = get_results_dir() / "efficientad" / category
+    if args.run_name:
+        results_dir = results_dir / args.run_name
+        
     engine = Engine(
         accelerator=device,
         devices=1,
         max_epochs=args.epochs, 
-        default_root_dir=f"./results/efficientad/{category}"
+        default_root_dir=str(results_dir)
     )
 
     print(f"🚀 Début de l'entraînement d'EfficientAD sur '{category}' ({args.epochs} époques)...")
@@ -91,7 +108,7 @@ def main():
     
     print(f"📦 Exportation du modèle '{category}' au format ONNX...")
     engine.export(model=model, export_type=ExportType.ONNX)
-
+    
     print(f"✅ [SUCCÈS] Entraînement et exportation ONNX terminés pour '{category}' !")
 
 if __name__ == "__main__":

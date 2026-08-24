@@ -1,7 +1,39 @@
+# Logs
+
 logs/
-mvtec_anomaly_detection/
+*.log
+
+# Anomalib defaults
 results/
 metrics/
+
+# Datasets & Images
+datasets/
+mvtec_anomaly_detection/
+*.png
+*.jpg
+*.jpeg
+
+# Trained Models
+trained_models/
+*.pt
+*.ckpt
+*.engine
+*.onnx
+
+# Data output
+*.csv
+
+# Python
 __pycache__/
 *.pyc
+.env
+env/
+venv/
+.venv/
+
+# OS specific
 .DS_Store
+
+# benchmarks
+bencharks/mvtec_anomaly_detection/*

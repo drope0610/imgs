@@ -15,13 +15,13 @@ else
 fi
 
 # Gestion du paramètre de base dir si fourni
-DATASET_DIR=${1:-"mvtec_anomaly_detection"}
+DATASET_DIR=${1:-"datasets/mvtec_anomaly_detection"}
 
 # ==========================================================
 # ETAPE 1 : GENERATION DES PREDICTIONS (ANOMALIB / WINCLIP)
 # ==========================================================
 echo -e "\n>>> 1. Execution du script de test WinClip..."
-python src/test_winclip.py
+python benchmarks/test_winclip.py
 
 if [ $? -ne 0 ]; then
     echo "[ERREUR] Le script test_winclip.py a plante. Arret du pipeline."
@@ -33,11 +33,11 @@ fi
 # ==========================================================
 echo -e "\n>>> 2. Lancement du script officiel de calcul MVTec AD..."
 # Installation des dépendances éventuelles de l'outil d'évaluation
-if [ -f "mvtec_ad_evaluation/requirements.txt" ]; then
-    pip install -q -r mvtec_ad_evaluation/requirements.txt
+if [ -f "benchmarks/mvtec_ad_evaluation/requirements.txt" ]; then
+    pip install -q -r benchmarks/mvtec_ad_evaluation/requirements.txt
 fi
 
-python mvtec_ad_evaluation/evaluate_experiment.py \
+python benchmarks/mvtec_ad_evaluation/evaluate_experiment.py \
     --dataset_base_dir "$DATASET_DIR" \
     --anomaly_maps_dir "$DATASET_DIR/predictions" \
     --output_dir metrics
@@ -51,7 +51,7 @@ fi
 # ETAPE 3 : AFFICHAGE DES SCORES FINAUX
 # ==========================================================
 echo -e "\n>>> 3. Affichage du bilan des performances (AU-ROC / AU-PRO)..."
-python mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
+python benchmarks/mvtec_ad_evaluation/print_metrics.py --metrics_folder ./metrics/
 
 # Désactivation
 deactivate

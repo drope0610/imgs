@@ -6,7 +6,7 @@ from anomalib.models import EfficientAd
 from anomalib.engine import Engine
 
 def main():
-    dataset_path = Path("./mvtec_anomaly_detection")
+    dataset_path = Path("./datasets/mvtec_anomaly_detection")
     output_csv = Path("./results_efficientad/mvtec_benchmark_results.csv")
     
     # 1. Lister automatiquement toutes les catégories (les sous-dossiers)

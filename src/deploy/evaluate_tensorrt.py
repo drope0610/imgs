@@ -1,89 +1,88 @@
-import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
-import numpy as np
-import cv2
+import argparse
+import sys
 import os
+import cv2
+import numpy as np
 import glob
 
-def allocate_buffers(engine):
-    inputs, outputs, bindings = [], [], []
-    stream = cuda.Stream()
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from src.deploy.trt_engine import TensorRTEngine
+from src.config import get_dataset_root, get_results_dir
+
+def main():
+    parser = argparse.ArgumentParser(description="Évaluation TensorRT massive avec export TIFF")
+    parser.add_argument("--category", type=str, default="capsule", help="Catégorie (ex: capsule)")
+    parser.add_argument("--engine", type=str, help="Chemin du .engine (par défaut FP16)")
+    parser.add_argument("--output_dir", type=str, help="Dossier de sortie (optionnel)")
+    args = parser.parse_args()
+
+    dataset_root = get_dataset_root() / args.category
+    test_dir = dataset_root / "test"
     
-    for binding in engine:
-        size = trt.volume(engine.get_binding_shape(binding))
-        dtype = trt.nptype(engine.get_binding_dtype(binding))
-        
-        # Mémoire pagelocked (host) pour des transferts CPU <-> GPU très rapides sur Jetson
-        host_mem = cuda.pagelocked_empty(size, dtype)
-        device_mem = cuda.mem_alloc(host_mem.nbytes)
-        bindings.append(int(device_mem))
-        
-        if engine.binding_is_input(binding):
-            inputs.append({'host': host_mem, 'device': device_mem, 'shape': engine.get_binding_shape(binding)})
-        else:
-            outputs.append({'host': host_mem, 'device': device_mem, 'shape': engine.get_binding_shape(binding)})
-            
-    return inputs, outputs, bindings, stream
+    if args.engine:
+        engine_path = args.engine
+    else:
+        engine_path = str(get_results_dir() / "engines" / f"efficientad_{args.category}_fp16.engine")
 
-def infer(context, bindings, inputs, outputs, stream):
-    # Transfert asynchrone Host -> Device
-    for inp in inputs:
-        cuda.memcpy_htod_async(inp['device'], inp['host'], stream)
-    
-    # Exécution de l'inférence TensorRT
-    context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
-    
-    # Transfert asynchrone Device -> Host
-    for out in outputs:
-        cuda.memcpy_dtoh_async(out['host'], out['device'], stream)
-        
-    stream.synchronize()
-    return [out['host'] for out in outputs]
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        output_dir = str(get_results_dir() / "anomaly_maps" / args.category)
 
-if __name__ == "__main__":
-    # --- Initialisation ---
-    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-    with open("results/engines/efficientad_cable.engine", "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
-        engine = runtime.deserialize_cuda_engine(f.read())
-
-    context = engine.create_execution_context()
-    inputs, outputs, bindings, stream = allocate_buffers(engine)
-
-    test_dir = "dataset/cable/test/"
-    output_dir = "results/anomaly_maps/cable/"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Boucle sur toutes les images (good et défauts)
+    if not os.path.exists(engine_path):
+        raise FileNotFoundError(f"Moteur TensorRT introuvable : {engine_path}")
+
+    # 1. Chargement du moteur optimisé (TensorRTEngine gère déjà l'allocation et les streams)
+    print(f"⚙️ Chargement du moteur TensorRT : {engine_path}")
+    engine = TensorRTEngine(engine_path)
+
     image_paths = glob.glob(os.path.join(test_dir, "**", "*.png"), recursive=True)
+    if not image_paths:
+        print(f"⚠️ Aucune image de test trouvée dans {test_dir}")
+        return
+
+    print(f"🚀 Début de l'évaluation sur {len(image_paths)} images...")
 
     for img_path in image_paths:
-        # 1. Prétraitement
+        # Prétraitement (identique à Anomalib)
         img = cv2.imread(img_path)
+        if img is None:
+            continue
+            
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_resized = cv2.resize(img_rgb, (256, 256))
+        
+        # Normalisation ImageNet (Standard Anomalib EfficientAD)
         img_norm = (img_resized.astype(np.float32) / 255.0 - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
-        img_input = np.transpose(img_norm, (2, 0, 1)).ravel()
-
-        # 2. Copie dans la mémoire pagelocked
-        np.copyto(inputs[0]['host'], img_input)
-
-        # 3. Inférence
-        trt_outputs = infer(context, bindings, inputs, outputs, stream)
+        img_input = np.transpose(img_norm, (2, 0, 1))
+        img_batched = np.expand_dims(img_input, axis=0)
         
-        # 4. Post-traitement de l'Anomaly Map (adapter selon la sortie d'EfficientAd)
-        anomaly_map = trt_outputs[0].reshape((256, 256))
+        img_ready = np.ascontiguousarray(img_batched, dtype=engine.inputs[0]['dtype'])
+
+        # Inférence via la classe unifiée
+        outputs = engine.infer(img_ready)
         
-        # Redimensionnement à la taille de l'image d'origine pour le calcul AU-ROC (Anomalib standard)
+        # Extraction de l'anomaly map
+        anomaly_map = outputs[0].reshape((256, 256))
+        
+        # Redimensionnement à la taille d'origine (idéal pour le calcul d'AU-ROC par la suite)
         anomaly_map_resized = cv2.resize(anomaly_map, (img.shape[1], img.shape[0]))
         
-        # Normalisation visuelle (optionnelle) et sauvegarde en TIFF 32-bit pour garder la précision
-        category_name = os.path.basename(os.path.dirname(img_path)) # ex: "good", "hole", "scratch"
+        # Sauvegarde en 32-bit TIFF Float pour ne perdre AUCUNE PRÉCISION
+        category_name = os.path.basename(os.path.dirname(img_path)) # ex: good, hole, scratch
         filename = os.path.basename(img_path).replace('.png', '.tiff')
         
         save_path = os.path.join(output_dir, category_name)
         os.makedirs(save_path, exist_ok=True)
         
+        # OpenCV supporte l'écriture de float32 dans un TIFF (si TIFF est compilé)
+        # Sinon, pour la compatibilité, on sauvegarde la matrice raw via numpy ou on utilise cv2.imwrite
+        # Les Tiffs float32 sont standard en analyse d'image
         cv2.imwrite(os.path.join(save_path, filename), anomaly_map_resized)
 
-    print(f"Évaluation terminée sur {len(image_paths)} images.")
+    print(f"✅ Évaluation terminée ! Toutes les cartes ont été générées dans {output_dir}")
+
+if __name__ == "__main__":
+    main()

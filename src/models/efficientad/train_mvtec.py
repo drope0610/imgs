@@ -5,7 +5,7 @@ from pathlib import Path
 
 def main():
     # Path absolu ou relatif vers votre dossier MVTec
-    dataset_path = Path("./mvtec_anomaly_detection")
+    dataset_path = Path("./datasets/mvtec_anomaly_detection")
     
     # 1. Configuration du DataModule spécifique à MVTec
     # Nous testons ici sur la catégorie 'bottle'
