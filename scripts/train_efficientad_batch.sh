@@ -20,7 +20,7 @@ echo "=========================================================="
 echo "🚀 DÉMARRAGE DE L'ENTRAÎNEMENT PAR LOTS (EFFICIENT AD) 🚀"
 echo "=========================================================="
 
-CATEGORIES=("pill" "pillqc")
+CATEGORIES=("pillqc")
 IMG_SIZES=(256 512)
 EPOCHS_LIST=(50 250 500)
 

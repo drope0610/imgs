@@ -1,3 +1,14 @@
+import sys
+
+# Mocks for rich progress bars to avoid TTY crashes in nohup
+import rich.console
+rich.console.Console.clear_live = lambda self: None
+
+import anomalib.models.components.sampling.k_center_greedy
+def mock_safe_track(sequence, *args, **kwargs):
+    yield from sequence
+anomalib.models.components.sampling.k_center_greedy.safe_track = mock_safe_track
+
 import argparse
 import os
 from pathlib import Path
@@ -6,8 +17,6 @@ from anomalib.engine import Engine
 from anomalib.models import Padim, Patchcore
 from anomalib.data import MVTec, Folder
 from anomalib.deploy import ExportType
-import sys
-sys.stdout.isatty = lambda: True
 
 from src.config import get_dataset_root, get_results_dir
 from src.utils.augmentations import get_train_augmentations
@@ -24,28 +33,27 @@ def train_model(model_name, category, dataset_type, img_size, epochs):
     print(f"Dossier de sortie : {output_dir}")
     
     # 1. Dataset
-    transforms = get_train_augmentations(img_size)
     if dataset_type == "mvtec":
         datamodule = MVTec(
-            root=dataset_root,
+            root=str(dataset_root),
             category=category,
             image_size=(img_size, img_size),
             train_batch_size=32,
             eval_batch_size=32,
-            transform=transforms
+            task="segmentation"
         )
     else:
         # Folder dataset expects specific structure
+        dataset_root_resolved = Path.home() / "Desktop" / "Images" / "imgs" / "datasets" / category / "images"
         datamodule = Folder(
             name=category,
-            root=dataset_root / category,
-            normal_dir="train/good",
-            abnormal_dir="test/defect", # placeholder for anomalib API
-            normal_test_dir="test/good",
+            root=dataset_root_resolved,
+            normal_dir="normal",
+            abnormal_dir="dirt", 
             image_size=(img_size, img_size),
             train_batch_size=32,
             eval_batch_size=32,
-            transform=transforms
+            task="classification"
         )
         
     # 2. Modèle

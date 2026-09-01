@@ -64,13 +64,13 @@ def main():
         )
     elif args.dataset_type == "folder":
         # Specific logic for pillqc style structure
-        dataset_root = Path(f"./datasets/{category}/images")
-        if not dataset_root.exists():
-            raise FileNotFoundError(f"Dossier dataset introuvable : {dataset_root}")
+        dataset_root_resolved = Path.home() / "Desktop" / "Images" / "imgs" / "datasets" / category / "images"
+        if not dataset_root_resolved.exists():
+            raise FileNotFoundError(f"Dossier dataset introuvable : {dataset_root_resolved}")
         
         datamodule = Folder(
             name=category,
-            root=dataset_root,
+            root=dataset_root_resolved,
             normal_dir="normal",
             abnormal_dir="dirt", # stub for anomalib structure
             image_size=(args.img_size, args.img_size),
